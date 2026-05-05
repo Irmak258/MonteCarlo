@@ -1,4 +1,4 @@
-# Monte Carlo Algorithma Projesi
+# Monte Carlo Algoritma Projesi
 
 # Proje Açıklması
 Bu projede, büyük bir veri seti içerisinde belirli bir özelliği sağlayan elemanların oranını bulmak için Monte Carlo algoritması kullanılmıştır.
