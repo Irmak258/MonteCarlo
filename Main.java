@@ -1,96 +1,105 @@
 import java.util.Random;
-import java.util.ArrayList;
-import java.util.List;
 
 public class Main {
 
+    // Koşul: veri elemanının 7'ye bölümünden kalan 0 mı?
+    static boolean kosulSagla(int x) {
+        return x % 7 == 0;
+    }
+
     public static void main(String[] args) {
 
-        // Parametreler
-        final long ogrenciNo = 1240505006L;
-        final int n = 1_000_000; // veri boyutu
-        final int k = 100_000;   // örnek sayısı
-        final int RUNS = 100;    // deney sayısı
+        //Parametreler
+        final long OGRENCI_NO = 1240505006L;
+        final int  N          = 1_000_000;   // veri boyutu (son 2 hane ≥ 5)
+        final int  K          = 100_000;     // her denemede örnek sayısı
+        final int  RUNS       = 100;         // deney sayısı
+        final double EPSILON  = 0.005;       // hata toleransı (teorik hesap için)
 
-        Random dataRandom = new Random(ogrenciNo);       // veri üretimi
-        Random testRandom = new Random(ogrenciNo + 1);   // deney için ayrı
-
-        // Veri Seti Oluşturma
-        int[] veriSeti = new int[n];
-        for (int i = 0; i < n; i++) {
-            veriSeti[i] = dataRandom.nextInt(1000000); // 0 - 1M
+        //Veri seti oluştur
+        Random dataRng = new Random(OGRENCI_NO);
+        int[] veri = new int[N];
+        for (int i = 0; i < N; i++) {
+            veri[i] = dataRng.nextInt(1_000_000);
         }
 
-        // Gerçek Oran
+        //Gerçek oran (tam tarama)
         int gercekSayac = 0;
-        for (int x : veriSeti) {
-            if (x % 7 == 0) {
-                gercekSayac++;
-            }
+        for (int x : veri) {
+            if (kosulSagla(x)) gercekSayac++;
         }
-        double gercekOran = (double) gercekSayac / n;
+        double gercekOran = (double) gercekSayac / N;
 
-        // Monte Carlo
-        List<Double> tahminler = new ArrayList<>();
-        List<Double> sureler = new ArrayList<>();
+        //Monte Carlo deneyleri
+        double[] tahminler = new double[RUNS];
+        double[] surelerMs = new double[RUNS];
 
-        System.out.println("Deney başlatılıyor (100 tekrar)...");
+        for (int r = 0; r < RUNS; r++) {
+            // Her deneme bağımsız: ayrı seed
+            Random rng = new Random(OGRENCI_NO + r + 1);
 
-        for (int deneme = 0; deneme < RUNS; deneme++) {
-
-            long baslangic = System.nanoTime();
+            long t0 = System.nanoTime();
 
             int sayac = 0;
-
-            for (int i = 0; i < k; i++) {
-                int indeks = testRandom.nextInt(n);
-
-                if (veriSeti[indeks] % 7 == 0) {
-                    sayac++;
-                }
+            for (int i = 0; i < K; i++) {
+                if (kosulSagla(veri[rng.nextInt(N)])) sayac++;
             }
 
-            double tahminiOran = (double) sayac / k;
-
-            long bitis = System.nanoTime();
-            double sureMs = (bitis - baslangic) / 1_000_000.0;
-
-            tahminler.add(tahminiOran);
-            sureler.add(sureMs);
+            surelerMs[r] = (System.nanoTime() - t0) / 1_000_000.0;
+            tahminler[r] = (double) sayac / K;
         }
 
-        // Ortalama Hesaplar
-        double ortalamaTahmin = 0;
-        for (double t : tahminler) ortalamaTahmin += t;
-        ortalamaTahmin /= RUNS;
+        //İstatistikler
+        double ortTahmin = ort(tahminler);
+        double ortSure   = ort(surelerMs);
+        double stdTahmin = std(tahminler, ortTahmin);
+        double stdSure   = std(surelerMs, ortSure);
 
-        double ortalamaSure = 0;
-        for (double s : sureler) ortalamaSure += s;
-        ortalamaSure /= RUNS;
+        //Teorik P(hata) — Chebyshev eşitsizliği
+        //P(|X̄ - p| > ε) ≤ p(1-p) / (k · ε²)
+        double p           = gercekOran;
+        double teorikHata  = Math.min(1.0, p * (1 - p) / (K * EPSILON * EPSILON));
 
-        // Standart Sapma
-        double varyans = 0;
+        //Deneysel hata oranı
+        int hataliSayac = 0;
         for (double t : tahminler) {
-            varyans += Math.pow(t - ortalamaTahmin, 2);
+            if (Math.abs(t - gercekOran) > EPSILON) hataliSayac++;
         }
-        varyans /= RUNS;
-        double stdSapma = Math.sqrt(varyans);
+        double deneyselHata = (double) hataliSayac / RUNS;
 
-        // Hata
-        double hata = Math.abs(gercekOran - ortalamaTahmin);
+        //Sonuçlar
+        System.out.println("=========================================");
+        System.out.println("Öğrenci No    : " + OGRENCI_NO);
+        System.out.println("Algoritma     : Monte Carlo");
+        System.out.printf ("Veri boyutu n : %,d%n", N);
+        System.out.printf ("Örnek sayısı k: %,d%n", K);
+        System.out.printf ("Epsilon ε     : %.4f%n", EPSILON);
+        System.out.println("=========================================");
+        System.out.printf ("Gerçek oran           : %.6f%n", gercekOran);
+        System.out.printf ("Ort. tahmini oran     : %.6f%n", ortTahmin);
+        System.out.printf ("Mutlak hata           : %.6f%n", Math.abs(gercekOran - ortTahmin));
+        System.out.println("-----------------------------------------");
+        System.out.printf ("Tahmin std sapması    : %.6f%n", stdTahmin);
+        System.out.println("-----------------------------------------");
+        System.out.printf ("Ortalama süre         : %.4f ms%n", ortSure);
+        System.out.printf ("Süre std sapması      : %.4f ms%n", stdSure);
+        System.out.println("-----------------------------------------");
+        System.out.printf ("Teorik P(hata) ≤      : %.6f  (Chebyshev)%n", teorikHata);
+        System.out.printf ("Deneysel hata oranı   : %.2f%%%n", deneyselHata * 100);
+        System.out.println("=========================================");
+    }
 
-        // Sonuç
-        System.out.println("-----------------------------------------");
-        System.out.println("Öğrenci No: " + ogrenciNo);
-        System.out.println("Algoritma: Monte Carlo");
-        System.out.println("Veri Boyutu (n): " + n);
-        System.out.println("Örnek Sayısı (k): " + k);
-        System.out.println("-----------------------------------------");
-        System.out.println("Gerçek Oran: " + gercekOran);
-        System.out.println("Tahmini Ortalama Oran: " + ortalamaTahmin);
-        System.out.println("Hata: " + hata);
-        System.out.println("-----------------------------------------");
-        System.out.println("Ortalama Süre: " + String.format("%.4f", ortalamaSure) + " ms");
-        System.out.println("Standart Sapma: " + String.format("%.6f", stdSapma));
+    //ortalama
+    static double ort(double[] dizi) {
+        double toplam = 0;
+        for (double v : dizi) toplam += v;
+        return toplam / dizi.length;
+    }
+
+    //standart sapma
+    static double std(double[] dizi, double ortalama) {
+        double toplam = 0;
+        for (double v : dizi) toplam += (v - ortalama) * (v - ortalama);
+        return Math.sqrt(toplam / dizi.length);
     }
 }
